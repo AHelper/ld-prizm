@@ -1,4 +1,8 @@
 /*
+ * License pending
+ * Copyright 2014 Collin Eggert
+ */
+/*
  * API for custom Exception Handler code.
  */
 #ifndef __EH_H
