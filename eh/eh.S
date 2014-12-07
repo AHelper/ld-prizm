@@ -499,6 +499,8 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   rts
   mov   #0, r0
 10:
+  mov.l @r0, r2
+  mov.l r2, @-r15
   ! If the end ptr points to the current entry, jump to EH_DelPage_Success 
   mov   r0, r2
   add   #8, r0 ! r2 is entry, r0 is next entry
@@ -508,10 +510,8 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   bf    11f
   ! Decrease the end ptr
   add   #-8, r1
+  bra 12f
   mov.l r1, @r4
-  ! Return true
-  rts
-  mov   #1, r0
   ! Copy the entry at the end point over the current entry 
   ! dest=r2, src=r0, stop when r0=r1
 11:
@@ -522,12 +522,121 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   add   #4, r2
   ! Copied, save new end
   mov.l r2, @r4
+12:
+  ! Scan the UTLB for matching entries
+  mov.l @r15+, r1
+  mov   r1, r0
+  ! Get the mask
+  and   #0b11, r0
+  ! If size == 0
+  tst   r0, r0
+  bf    13f
+    ! AND 0xFFFFFC00
+    mov.l 3f, r3
+    bra   16f
+    nop
+13:
+  ! ElIf size == 1
+  dt    r0
+  bf    14f
+    ! AND 0xFFFFF000
+    mov.l 4f, r3
+    bra   16f
+    nop
+14:
+  ! ElIf size == 2
+  dt    r0
+  bf    15f
+    ! AND 0xFFFF0000
+    mov.l 5f, r3
+    bra   16f
+    nop
+15:
+  ! ElIf size == 3
+    ! AND 0xFFF00000
+    mov.l 6f, r3
+16:     
+  and   r3, r1
+  mov   r1, r0
+  ! For e=3; e >= 0; e--
+  mov   #3, r1
+13: ! r0=entry, r1=entry ID, r3=mask
+  mov   #0, r2
+  cmp/ge r2, r1
+  bf    14f
+  add   #-1, r1
+  ! Do we match?
+  mov.l 2f, r2
+  add   r1, r2
+  shll8 r2
+  mov.l @r2, r4
+  and   r3, r4
+  cmp/eq r0, r4
+  bf    13b
+  ! Matched, invalidate it
+  mov.l @r2, r4
+  mov.l 7f, r5
+  and   r5, r4
+  mov.l r4, @r2 ! Invalidated the address
+  mov.l 8f, r2
+  add   r1, r2
+  shll8 r2
+  mov.l @r2, r4
+  and   r5, r4
+  mov.l r4, @r2 ! Invalidated the data
+14:
+  ! For e=3; e >= 0; e--
+  mov   #63, r1
+15: ! r0=entry, r1=entry ID, r3=mask
+  mov   #0, r2
+  cmp/ge r2, r1
+  bf    16f
+  add   #-1, r1
+  ! Do we match?
+  mov.l 9f, r2
+  add   r1, r2
+  shll8 r2
+  mov.l @r2, r4
+  and   r3, r4
+  cmp/eq r0, r4
+  bf    15b
+  ! Matched, invalidate it
+  mov.l @r2, r4
+  mov.l 7f, r5
+  and   r5, r4
+  mov.l r4, @r2 ! Invalidated the address
+  mov.l 10f, r2
+  add   r1, r2
+  shll8 r2
+  mov.l @r2, r4
+  and   r5, r4
+  mov.l r4, @r2 ! Invalidated the data
+16:
+  ! Return true
   rts
   mov   #1, r0
   
   .align 4
 1:
   .long EH_PAGE_TABLE_END
+2:
+  .long 0x00F20000
+3:
+  .long 0xFFFFFC00
+4:
+  .long 0xFFFFF000
+5:
+  .long 0xFFFF0000
+6:
+  .long 0xFFF00000
+7:
+  .long 0xFFFFFEFF
+8:
+  .long 0x00F30000
+9:
+  .long 0x00F60000
+10:
+  .long 0x00F70000
   
   .org 0x600
   .align 2
