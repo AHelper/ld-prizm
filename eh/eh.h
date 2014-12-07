@@ -33,12 +33,12 @@ extern volatile unsigned int _EH_Page_Table_End;
 
 extern int EH_Install();
 extern int EH_Uninstall();
-const volatile  unsigned int* EH_Data = &_EH_Data;
-const volatile unsigned int* EH_Page_Table = &_EH_Page_Table;
-const volatile unsigned int* EH_Page_Table_End = &_EH_Page_Table_End;
+extern const volatile unsigned int* EH_Data;
+extern const volatile unsigned int* EH_Page_Table;
+extern const volatile unsigned int* EH_Page_Table_End;
 /// For flags, see bits[10:0] of UTLB data entry.
-extern int EH_AddPage(unsigned int source, unsigned int dest, int flags);
-extern int EH_DelPage(unsigned int source);
+extern int EH_AddPage(unsigned int src_virtual, unsigned int dest_physical, int flags);
+extern int EH_DelPage(unsigned int src_virtual);
 extern void EH_SetTrapHandler(void (*callback)(int code));
 
 #ifdef __cplusplus

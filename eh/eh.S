@@ -105,7 +105,7 @@ Lvars02:
   .align 2
   .globl _EH_AddPage
   .type _EH_AddPage, @function
-_EH_AddPage: ! (args: r4=source, r5=dest, r6=flags, returns 1 on success, 0 on failure) 
+_EH_AddPage: ! (args: r4=virtual, r5=physical, r6=flags, returns 1 on success, 0 on failure) 
   ! Considering pages can be 4KB, you can have a LOT of pages.  Maybe a self-balancing binary tree? 
   ! But you can always improve, bare essentials first: 
   ! Get the position of the end of the table 
