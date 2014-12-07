@@ -281,20 +281,8 @@ EH_HANDLED_RETURN:
 Lvars03:
   .long EH_OLDVBR
  
- .align 4
- .globl __EH_Page_Table
- .type __EH_Page_Table, @notype
-__EH_Page_Table:
-EH_PAGE_TABLE_DATA:
-  ! This is a nice spot for a small table
-  
-
   .align 2
   .org 0x400
-  .globl __EH_Page_Table_End
-  .type __EH_Page_Table_End, @notype
-__EH_Page_Table_End:
-EH_PAGE_TABLE_DATA_END:
 EH400:
   /*
   mov.l Lvars04, r0
@@ -559,33 +547,6 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   and   r3, r1
   mov   r1, r0
   ! For e=3; e >= 0; e--
-  mov   #3, r1
-13: ! r0=entry, r1=entry ID, r3=mask
-  mov   #0, r2
-  cmp/ge r2, r1
-  bf    14f
-  add   #-1, r1
-  ! Do we match?
-  mov.l 2f, r2
-  add   r1, r2
-  shll8 r2
-  mov.l @r2, r4
-  and   r3, r4
-  cmp/eq r0, r4
-  bf    13b
-  ! Matched, invalidate it
-  mov.l @r2, r4
-  mov.l 7f, r5
-  and   r5, r4
-  mov.l r4, @r2 ! Invalidated the address
-  mov.l 8f, r2
-  add   r1, r2
-  shll8 r2
-  mov.l @r2, r4
-  and   r5, r4
-  mov.l r4, @r2 ! Invalidated the data
-14:
-  ! For e=3; e >= 0; e--
   mov   #63, r1
 15: ! r0=entry, r1=entry ID, r3=mask
   mov   #0, r2
@@ -612,6 +573,33 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   and   r5, r4
   mov.l r4, @r2 ! Invalidated the data
 16:
+  ! For e=3; e >= 0; e--
+  mov   #3, r1
+13: ! r0=entry, r1=entry ID, r3=mask
+  mov   #0, r2
+  cmp/ge r2, r1
+  bf    14f
+  add   #-1, r1
+  ! Do we match?
+  mov.l 2f, r2
+  add   r1, r2
+  shll8 r2
+  mov.l @r2, r4
+  and   r3, r4
+  cmp/eq r0, r4
+  bf    13b
+  ! Matched, invalidate it
+  mov.l @r2, r4
+  mov.l 7f, r5
+  and   r5, r4
+  mov.l r4, @r2 ! Invalidated the address
+  mov.l 8f, r2
+  add   r1, r2
+  shll8 r2
+  mov.l @r2, r4
+  and   r5, r4
+  mov.l r4, @r2 ! Invalidated the data
+14:
   ! Return true
   rts
   mov   #1, r0
@@ -684,3 +672,14 @@ EH600_RESTORE:
   .long EH600_RESTORE
 Lvars05:
   .long EH_OLDVBR
+  
+ .align 4
+ .globl __EH_Page_Table
+ .type __EH_Page_Table, @notype
+__EH_Page_Table:
+EH_PAGE_TABLE_DATA:
+  
+  .globl __EH_Page_Table_End
+  .type __EH_Page_Table_End, @notype
+__EH_Page_Table_End:
+EH_PAGE_TABLE_DATA_END:
