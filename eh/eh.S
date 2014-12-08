@@ -17,7 +17,7 @@
 
 ! Non-PIC, Renesas ABI
   .section ".eh", "ax" ! MUST SET THESE ELF SECTION FLAGS. a - ALLOC, x - EXEC. The binary BSF checks these to see if it should write to the binary.
-  
+  .list
   .org 0
   .align 2
   .globl _EH_Install
@@ -61,6 +61,17 @@ _EH_Install:
   ldc   r2, vbr
   nop
   
+  ! Patch the MMUCR
+  mov.l 6f, r0
+  mov.l @r0, r1
+  mov.l 7f, r2
+  mov.l 8f, r3
+  and   r2, r1
+  or    r3, r1
+  mov.l r1, @r0
+  mov.l Lstart01, r0
+  icbi  @r0
+  
   ! Return
   rts
   mov   #1, r0
@@ -74,10 +85,6 @@ _EH_Install:
   .long 0x200
 5:
   .long EH_PAGE_TABLE_DATA
-Lvars01:
-  .long EH_OLDVBR
-Lstart01:
-  .long _EH_Install
   
   .align 2
   .globl _EH_Uninstall
@@ -93,14 +100,34 @@ _EH_Uninstall:
   mov.l r0, @(0*4,r3)
   mov   #1, r0
   
+  ! Unpatch the MMUCR
+  mov.l 6f, r0
+  mov.l @r0, r1
+  mov.l 3f, r2
+  or    r2, r1
+  mov.l r1, @r0
+  mov.l Lstart01, r0
+  icbi  @r0
+  
   ! Return
 1:
   rts
   nop
   
   .align 4
+3:
+  .long 0xFC0000
+6:
+  .long 0xFF000010
+7:
+  .long 0xFF0303FF
+8:
+  .long 0xDC0000
+Lvars01:
 Lvars02:
   .long EH_OLDVBR
+Lstart01:
+  .long _EH_Install
   
   .align 2
   .globl _EH_AddPage
@@ -110,17 +137,16 @@ _EH_AddPage: ! (args: r4=virtual, r5=physical, r6=flags, returns 1 on success, 0
   ! But you can always improve, bare essentials first: 
   ! Get the position of the end of the table 
   mov.l 1f, r2 ! EH_PAGE_TABLE_END
-  mov.l 2f, r3 ! EH_PAGE_TABLE_DATA_END
+  mov.l 2f, r0 ! EH_PAGE_TABLE_DATA_END
   mov.l @r2, r1
-  mov.l @r3, r0
   add   #8, r1
-  cmp/ge r0, r1
+  cmp/hs r0, r1
   mov.l @r2, r1
   ! T=1 if we can't store anymore
   bf 10f
   ! If at the end, return false 
   rts
-  mov   #0, r1
+  mov   #0, r0
 10:
   ! Insert a cache of entry registers for quick access 
   ! ENTRY[0] = Source | size{0,1,2,3}
@@ -163,19 +189,6 @@ _EH_AddPage: ! (args: r4=virtual, r5=physical, r6=flags, returns 1 on success, 0
   .long 0x1FFFFC00
   
   .align 2
-  .globl _EH_SetTrapHandler
-  .type _EH_SetTrapHandler, @function
-_EH_SetTrapHandler: ! (args: void (*callback)())
-  ! Just copy
-  mov.l 1f, r2
-  rts
-  mov.l r4, @(6*4,r2)
-  
-  .align 4
-1:
-  .long EH_OLDVBR
-  
-  .align 2
   .org 0x100
 EH100: ! (VBR+H'100, ignore) 
   /*
@@ -204,6 +217,8 @@ EH100: ! (VBR+H'100, ignore)
     ! Check the exception type
     mov.l 2f, r2
     mov.l @r2, r3
+    mov.l 10f, r2
+    mov.l r3, @r2
     mov.l 3f, r2
     ! Did someone activate my TRAPA card?
     cmp/eq r2, r3
@@ -278,7 +293,22 @@ EH_HANDLED_RETURN:
   .long EH_HANDLED_RETURN
 5:
   .long 0xFF000020
+10:
+  .long 0xE520000C
 Lvars03:
+  .long EH_OLDVBR
+  
+  .align 2
+  .globl _EH_SetTrapHandler
+  .type _EH_SetTrapHandler, @function
+_EH_SetTrapHandler: ! (args: void (*callback)())
+  ! Just copy
+  mov.l 1f, r2
+  rts
+  mov.l r4, @(6*4,r2)
+  
+  .align 4
+1:
   .long EH_OLDVBR
  
   .align 2
@@ -309,11 +339,13 @@ EH400:
     ! Check the exception type
     mov.l 2f, r2
     mov.l @r2, r3
+    mov.l 9f, r2
+    and   r2, r3
     ! Is this a TLB miss?
-    mov.l 3f, r2
+    mov   #0x40, r2
     cmp/eq r2, r3
     bt    EH400_HANDLED
-    mov.l 4f, r2
+    mov   #0x60, r2
     cmp/eq r2, r3
     bf    EH400_UNHANDLED
 EH400_HANDLED:
@@ -322,8 +354,9 @@ EH400_HANDLED:
     !
     mov.l 5f, r4
     sts.l pr, @-r15
-    bsr   EH_LOOKUP_PAGE
     mov.l @r4, r4
+    bsr   EH_LOOKUP_PAGE
+    mov.l r4, @r1
     lds.l @r15+, pr
     ! If unhandled, jump into the OS (incrementing usage timer for debugging)
     bf    EH400_UNHANDLED
@@ -364,18 +397,22 @@ EH400_RESTORE:
   .long EH400_RESTORE
 2:
   .long 0xFF000024
-3:
-  .long 0x040
-4:
-  .long 0x060
+!3:
+!  .long 0x040
+!4:
+!  .long 0x060
 5:
   .long 0xFF000000 ! PTEH
 6:
   .long 0xFF000004 ! PTEL
-7:
-  .long 0xFF000010 ! MMUCR
-8:
-  .long 0xFF000034 ! PTEA
+!7:
+!  .long 0xFF000010 ! MMUCR
+!8:
+!  .long 0xFF000034 ! PTEA
+9:
+  .long 0xFFF
+10:
+  .long 0xE5200000
 Lvars04:
   .long EH_OLDVBR
   
@@ -395,8 +432,13 @@ EH_INVOCATION_COUNTER:
   .long 0
 EH_TRAP_CALLBACK:
   .long 0
+EH_DEBUG:
+  .long 0
   
   .align 2
+  .globl _EH_Lookup
+  .type _EH_Lookup, @function
+_EH_Lookup:
 EH_LOOKUP_PAGE: ! (args: r4=int address, returns T on success and r0=address of matched entry, not T on failure)
   ! ptr = table data
   mov.l 1f, r2
@@ -407,6 +449,7 @@ EH_LOOKUP_PAGE: ! (args: r4=int address, returns T on success and r0=address of 
   cmp/eq r2, r1
   bf    11f
   ! Clear T
+  mov   #0, r0
   rts
   clrt
   ! Return
@@ -648,9 +691,21 @@ EH600:
   ldc   r0, spc
   ! Restore the VBR JUST IN CASE
   mov.l Lvars05, r0
-  mov.l @(0*4,r0), r1
-  ldc   r1, vbr
+!  mov.l @(0*4,r0), r1
+!  ldc   r1, vbr
   ! Check the exception type?
+!    ! Check the exception type
+!    mov.l 2f, r2
+!    mov.l @r2, r3
+!    mov.l 9f, r2
+!    and   r2, r3
+!    ! Is this a TLB miss?
+!    mov.l 10f, r2
+!    mov.l r3, @r2
+!    mov.l 3f, r3
+!    mov.l @r3, r3
+!    add   #4, r2
+!    mov.l r3, @r2
   ! If unhandled, jump into the OS (incrementing usage timer for debugging)
   mov.l @(5*4,r0), r1
   add   #1, r1
@@ -670,6 +725,8 @@ EH600_RESTORE:
   .align 4
 1:
   .long EH600_RESTORE
+9:
+  .long 0xFFF
 Lvars05:
   .long EH_OLDVBR
   
@@ -678,6 +735,7 @@ Lvars05:
  .type __EH_Page_Table, @notype
 __EH_Page_Table:
 EH_PAGE_TABLE_DATA:
+  .fill 768, 8, 0
   
   .globl __EH_Page_Table_End
   .type __EH_Page_Table_End, @notype

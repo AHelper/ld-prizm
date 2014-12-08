@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fxcg/keyboard.h>
 
 typedef struct map_t
 {
@@ -22,7 +23,7 @@ void munmap(void *addr)
   
   errno = 0;
   
-  while(map && map->start != addr)
+  while(map && !(addr >= map->start && addr < map->end))
   {
     prev = map;
     map = map->next;
@@ -88,7 +89,7 @@ void mremap(void *addr)
   }
   
   // Add a new mapping
-  int handle = Bfile_OpenFile_OS(map->path, READ_SHARE);
+  int handle = Bfile_OpenFile_OS(map->path, READ);
   
   if(handle < 0)
   {
@@ -115,7 +116,6 @@ void mremap(void *addr)
         if(memcmp((unsigned int*)search, buffer, read) == 0)
         {
           // Found a match
-          printf("%08X -> %08X\n", (unsigned int)ptr, search);
           if(!EH_AddPage((unsigned int)ptr, search, TLB_FLAG_4KB))
           {
             errno = -11;
@@ -140,6 +140,8 @@ void mremap(void *addr)
 
 // ENOMEM - The memory would overlap an existing mapped location
 // EINVAL - Bad alignment (must be at least 4KB aligned)
+#define MMAP_STARTING_ADDRESS (void*)0x00100000
+
 void *mmap(void *addr, size_t length, int prot, int flags, char* file, off_t offset)
 {
   mmap_t* next_map;
@@ -156,7 +158,7 @@ void *mmap(void *addr, size_t length, int prot, int flags, char* file, off_t off
   
   filename = (unsigned short*)malloc((strlen(file)+1)*2);
   Bfile_StrToName_ncpy(filename, (const unsigned char*)file, strlen(file) + 1);
-  int handle = Bfile_OpenFile_OS(filename, READ_SHARE);
+  int handle = Bfile_OpenFile_OS(filename, READ);
   
   if(handle < 0)
   {
@@ -181,28 +183,50 @@ void *mmap(void *addr, size_t length, int prot, int flags, char* file, off_t off
   
   Bfile_CloseFile_OS(handle);
   
-  if(!mmaps)
-    mmaps = (mmap_t*)malloc(sizeof(mmap_t));
-  
-  next_map = mmaps;
-  
-  while(next_map->next)
+  if(!addr)
   {
+    // Pick the first location that works.
+    addr = MMAP_STARTING_ADDRESS;
+    mmap_t *map = mmaps;
+    
+    while(map)
+    {
+      if(addr < map->end && (unsigned int)addr + length > (unsigned int)map->start)
+      {
+        addr = map->end;
+        map = mmaps;
+      }
+      else
+        map = map->next;
+    }
+    printf("Generated addr=%08X\n", (unsigned int)addr);
+  }
+  
+  if(!mmaps)
+  {
+    mmaps = (mmap_t*)malloc(sizeof(mmap_t));
+    next_map = mmaps;
+  } else {
+    next_map = mmaps;
+    
+    while(next_map->next)
+    {
+      if(addr < next_map->end && (unsigned int)addr + length > (unsigned int)next_map->start)
+      {
+        errno = ENOMEM;
+        return MAP_FAILED;
+      }
+      next_map = next_map->next;
+    }
+    
     if(addr < next_map->end && (unsigned int)addr + length > (unsigned int)next_map->start)
     {
       errno = ENOMEM;
       return MAP_FAILED;
     }
-    next_map = next_map->next;
+    
+    next_map = (next_map->next = (mmap_t*)malloc(sizeof(mmap_t)));
   }
-  
-  if(addr < next_map->end && (unsigned int)addr + length > (unsigned int)next_map->start)
-  {
-    errno = ENOMEM;
-    return MAP_FAILED;
-  }
-  
-  next_map = (next_map->next = (mmap_t*)malloc(sizeof(mmap_t)));
   
   next_map->start = addr;
   next_map->end = (unsigned int*)((unsigned int)addr + length);
