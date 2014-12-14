@@ -56,7 +56,7 @@ void mremap(void *addr);
  * @arg offset Offset in the file to start mapping from
  * @returns Pointer to mapped region or MAP_FAILED on error.
  */
-void *mmap(void *addr, size_t length, int prot, int flags, char* file, off_t offset);
+void *mmap(void *addr, size_t length, int prot, int flags, const char* file, off_t offset);
 
 #ifdef __cplusplus
 }

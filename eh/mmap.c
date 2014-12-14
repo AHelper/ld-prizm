@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <fxcg/file.h>
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fxcg/keyboard.h>
@@ -59,14 +60,13 @@ void munmap(void *addr)
   free(map);
 }
 
-#include <stdio.h>
 void mremap(void *addr)
 {
   mmap_t *map = mmaps;
   
   errno = 0;
   
-  while(map && map->start != addr)
+  while(map && (map->start > addr || map->end <= addr))
     map = map->next;
   
   if(!map)
@@ -142,7 +142,7 @@ void mremap(void *addr)
 // EINVAL - Bad alignment (must be at least 4KB aligned)
 #define MMAP_STARTING_ADDRESS (void*)0x00100000
 
-void *mmap(void *addr, size_t length, int prot, int flags, char* file, off_t offset)
+void *mmap(void *addr, size_t length, int prot, int flags, const char* file, off_t offset)
 {
   mmap_t* next_map;
   unsigned short *filename;
@@ -199,7 +199,6 @@ void *mmap(void *addr, size_t length, int prot, int flags, char* file, off_t off
       else
         map = map->next;
     }
-    printf("Generated addr=%08X\n", (unsigned int)addr);
   }
   
   if(!mmaps)

@@ -597,11 +597,11 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   bf    16f
   add   #-1, r1
   ! Do we match?
-  mov.l 9f, r2
-  add   r1, r2
-  shll8 r2
+  mov.l 9f, r2 ! 0x00F60000
+  add   r1, r2 ! Say, 0x00F60010
+  shll8 r2     ! Say, 0xF6001000
   mov.l @r2, r4
-  and   r3, r4
+  and   r3, r4 ! Mask
   cmp/eq r0, r4
   bf    15b
   ! Matched, invalidate it
@@ -609,12 +609,16 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   mov.l 7f, r5
   and   r5, r4
   mov.l r4, @r2 ! Invalidated the address
+  icbi  @r2
   mov.l 10f, r2
   add   r1, r2
   shll8 r2
   mov.l @r2, r4
   and   r5, r4
   mov.l r4, @r2 ! Invalidated the data
+  icbi  @r2
+  bra   15b
+  nop
 16:
   ! For e=3; e >= 0; e--
   mov   #3, r1
@@ -637,11 +641,15 @@ _EH_DelPage: ! (args: int source, returns 1 on success, 0 on failure)
   and   r5, r4
   mov.l r4, @r2 ! Invalidated the address
   mov.l 8f, r2
+  icbi  @r2
   add   r1, r2
   shll8 r2
   mov.l @r2, r4
   and   r5, r4
   mov.l r4, @r2 ! Invalidated the data
+  icbi  @r2
+  bra   13b
+  nop
 14:
   ! Return true
   rts
